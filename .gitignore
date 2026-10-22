@@ -1,0 +1,19 @@
+node_modules/
+dist/
+cdk.out/
+*.tsbuildinfo
+.env
+# Never commit game ROMs or anything derived from them.
+dump/
+*.sfc
+*.smc
+# Built emulator core (build with `npm run core:build`).
+emulator/snes9x-src/
+emulator/out/
+emulator/*.o
+public/core/linked-past-core.*
+.playwright-mcp/
+infra/cdk.out/
+coverage/
+.sonar/
+.scannerwork/

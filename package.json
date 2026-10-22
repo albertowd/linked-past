@@ -1,0 +1,33 @@
+{
+  "description": "Play A Link to the Past together in your browser. Bring your own ROM, host a room on your local network, no servers.",
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@types/node": "^22.10.2",
+    "@vitejs/plugin-basic-ssl": "2.3.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5",
+    "vite-plugin-pwa": "^0.21.1"
+  },
+  "name": "linked-past",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p . && vite build",
+    "core:build": "sh scripts/build-core.sh",
+    "dev": "vite",
+    "icons": "node scripts/make-icon.mjs",
+    "lan": "vite build && HTTPS=1 vite preview --host 0.0.0.0 --port 8443",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "preview": "vite preview",
+    "rom:challenges": "node scripts/make-rom-challenges.mjs",
+    "sonar": "sh scripts/sonar.sh scan",
+    "sonar:down": "sh scripts/sonar.sh down",
+    "sonar:up": "sh scripts/sonar.sh up",
+    "test": "node --import tsx --test 'test/**/*.test.ts'",
+    "test:coverage": "mkdir -p coverage && node --import tsx --test --experimental-test-coverage --test-coverage-include='src/**' --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info 'test/**/*.test.ts'",
+    "typecheck": "tsc -p ."
+  },
+  "type": "module",
+  "version": "0.1.0"
+}

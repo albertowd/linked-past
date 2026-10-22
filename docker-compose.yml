@@ -1,0 +1,26 @@
+# Code quality only: the game itself needs no server (players host rooms in their browser).
+# `npm run sonar:up` / `npm run sonar` / `npm run sonar:down` (see scripts/sonar.sh).
+services:
+  sonarqube:
+    image: sonarqube:26.9.0.129388-community
+    profiles: [sonar]
+    ports:
+      - "${SONAR_PORT:-9000}:9000"
+    environment:
+      SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
+    # Local dev only: data lives in the image's anonymous volumes and is wiped by sonar:down / dev:down.
+
+  sonar-scanner:
+    image: sonarsource/sonar-scanner-cli:12.2.0.4256_8.1.0
+    platform: linux/amd64 # only published for amd64; runs emulated on Apple silicon
+    profiles: [sonar]
+    environment:
+      SONAR_HOST_URL: http://sonarqube:9000
+      SONAR_TOKEN: ${SONAR_TOKEN:-}
+    volumes:
+      - .:/usr/src
+    depends_on:
+      - sonarqube
+    # Runs on demand: docker compose run --rm sonar-scanner
+    command: ["sonar-scanner"]
+

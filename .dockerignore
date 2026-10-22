@@ -1,0 +1,8 @@
+node_modules
+**/node_modules
+dump
+*.sfc
+*.smc
+emulator/snes9x-src
+cdk.out
+**/dist
