@@ -297,7 +297,11 @@ export class GameScreen implements SessionUI {
         'li',
         { class: mine ? 'mine' : '' },
         label(`${name}:`, { color: sender ? MODE_COLOR[sender.mode] : '#f8d830' }, 2),
-        label(text, {}, 2),
+        // One label per word so long messages wrap instead of widening the sidebar.
+        ...text
+          .split(/\s+/)
+          .filter(Boolean)
+          .map((word) => label(word, {}, 2)),
       ),
     );
   }

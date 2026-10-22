@@ -274,6 +274,7 @@ select:focus {
   padding: 8px;
   background: #080818;
   min-height: 0;
+  min-width: 0; /* never grow past --side, which would shrink the game screen */
 }
 
 .side header {
@@ -371,6 +372,7 @@ select:focus {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: 4px;
