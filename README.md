@@ -2,6 +2,8 @@
 
 **Play it at [linked-past.albertowd.dev](https://linked-past.albertowd.dev)**: bring your own ROM, nothing to install.
 
+![Two players in the same world: Mia's Link walks out of the house with the host's, while they chat in the sidebar](docs/screenshots/gameplay.webp)
+
 Multiplayer for *The Legend of Zelda: A Link to the Past*, played in the browser as an installable PWA. Each player has their own story and save, but everyone explores the same world: see friends on screen, fight or keep the peace, trade items, and chat.
 
 **There is no game server.** One player hosts a room in their own browser, and friends on the same network join with an invite code.
@@ -39,6 +41,10 @@ All five share the same WRAM layout, which was checked with a headless harness c
 1. The host clicks **Invite** and sends the invite code to a friend in any way: a chat app, a message, or even typed by hand.
 2. The friend clicks **Join**, pastes the code, and sends back the **reply code** the app shows.
 3. The host pastes the reply. The two browsers connect directly with WebRTC, end-to-end encrypted. Do this once per friend; several invites can be open at once.
+
+| Start screen | Host: invite | Friend: join |
+| --- | --- | --- |
+| ![Start screen with the Link and Zelda modes, a name, and Host/Join](docs/screenshots/start.webp) | ![Invite dialog with the invite code, the pasted reply and "Mia: Connected"](docs/screenshots/invite.webp) | ![Join dialog with the pasted invite and the reply code to send back](docs/screenshots/join.webp) |
 
 WebRTC runs with **no STUN/TURN servers**, so only local addresses are used and nothing leaves your network. The codes are compressed WebRTC session descriptions, usable once and only by the two of you.
 
