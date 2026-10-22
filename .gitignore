@@ -7,11 +7,11 @@ cdk.out/
 dump/
 *.sfc
 *.smc
-# Built emulator core (build with `npm run core:build`).
+# Emulator build intermediates. The built core in public/core is committed on purpose, so
+# static hosts that build from git (Vercel) serve it without needing Docker or emsdk.
 emulator/snes9x-src/
 emulator/out/
 emulator/*.o
-public/core/linked-past-core.*
 .playwright-mcp/
 infra/cdk.out/
 coverage/

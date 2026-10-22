@@ -1,5 +1,7 @@
 # Linked Past
 
+**Play it at [linked-past.albertowd.dev](https://linked-past.albertowd.dev)**: bring your own ROM, nothing to install.
+
 Multiplayer for *The Legend of Zelda: A Link to the Past*, played in the browser as an installable PWA. Each player has their own story and save, but everyone explores the same world: see friends on screen, fight or keep the peace, trade items, and chat.
 
 **There is no game server.** One player hosts a room in their own browser, and friends on the same network join with an invite code.
@@ -52,7 +54,8 @@ src/shared/      game core: RAM map, protocol, rules, pose codec, delta streams,
                  and HostCore; no DOM code, so its tests run in Node
 src/             the PWA: emulator loop, sprite capture/overlay, UI, WebRTC host/guest links
 test/            node:test suites (test/shared for the core)
-public/          icons, plus the built emulator core in public/core
+public/          icons, plus the built emulator core in public/core (committed, so static hosts
+                 that build from git serve it)
 scripts/         core build, ROM challenge table generator, SonarQube helpers
 ```
 
@@ -62,7 +65,7 @@ Requirements: Node 22+. Docker is optional, needed only to build the emulator co
 
 ```sh
 npm install
-npm run core:build     # builds public/core/linked-past-core.{js,wasm}
+npm run core:build     # optional: rebuilds the committed public/core/linked-past-core.{js,wasm}
 npm run dev            # http://localhost:5173 (localhost counts as secure)
 ```
 
