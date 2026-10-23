@@ -5,11 +5,13 @@ import { browserLocale, setLocale, t } from './i18n.js';
 import { GuestLink } from './net/guest.js';
 import { HostLink } from './net/host.js';
 import type { Link } from './net/link.js';
+import { clearLinkedRoom, decodeCode, linkedRoom } from './net/rtc.js';
 import * as db from './rom/db.js';
 import { type Cartridge, identify, loadSaved, remember } from './rom/rom.js';
 import { byId, h, panel, setFont } from './ui/dom.js';
 import { PixelFont } from './ui/font.js';
 import { GameScreen } from './ui/game.js';
+import { appIcon, cartridgeIcon } from './ui/icons.js';
 import { startScreen } from './ui/start.js';
 
 registerSW({ immediate: true });
@@ -38,9 +40,10 @@ async function pickRom(error?: string): Promise<Cartridge> {
     show(
       panel(
         'center rom',
+        appIcon(),
         h('h1', {}, t.pickRom),
         h('p', {}, t.pickRomHelp),
-        h('button', { class: 'btn', onclick: () => input.click() }, t.chooseFile),
+        h('button', { class: 'btn', onclick: () => input.click() }, cartridgeIcon(), t.chooseFile),
         input,
         msg,
       ),
@@ -77,10 +80,19 @@ async function main() {
   }
   const font = new PixelFont(atlas);
   setFont(font);
-  const choice = await startScreen(cart, show);
+  // Opened from a room link (the host's QR code): say whose room it is and suggest Join.
+  const room = linkedRoom();
+  const invitedBy = room
+    ? await decodeCode('room', room).then(
+        (c) => c.name ?? '',
+        () => '',
+      )
+    : undefined;
+  const choice = await startScreen(cart, show, undefined, invitedBy);
+  if (room) clearLinkedRoom();
   const hello = { name: choice.name, mode: choice.mode, rom: cart.info.sha1 };
   const link: Link = choice.role === 'host' ? new HostLink(choice.name, hello) : new GuestLink(hello, cart);
-  const screen = new GameScreen(font, atlas, choice.mode, link);
+  const screen = new GameScreen(font, atlas, choice.mode, link, choice.role === 'guest' ? invitedBy : undefined);
   show(screen.root);
   const game = new GameSession(cart, font, link, choice.mode, screen.screen, screen.overlay, screen);
   screen.bind(game);

@@ -15,11 +15,12 @@ function keys(o: object, prefix = ''): string[] {
 
 test('every catalog has exactly the English keys', () => {
   const expected = keys(i18n.catalogs.en).sort();
-  for (const locale of ['fr', 'de'] as const) assert.deepEqual(keys(i18n.catalogs[locale]).sort(), expected, locale);
+  for (const locale of ['fr', 'de', 'ja'] as const)
+    assert.deepEqual(keys(i18n.catalogs[locale]).sort(), expected, locale);
 });
 
 test('every locale names every tradable bottle and error', () => {
-  for (const locale of ['en', 'fr', 'de'] as const) {
+  for (const locale of ['en', 'fr', 'de', 'ja'] as const) {
     i18n.setLocale(locale);
     assert.equal(i18n.t.potions.length, TRADABLE_BOTTLES.length, locale);
     assert.ok(i18n.t.errors.rom_proof_failed, locale);

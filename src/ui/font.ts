@@ -3,10 +3,58 @@
 import type { Atlas, Sprite } from '../game/harvest.js';
 import { ctx2d } from './dom.js';
 
-// Letters some regions lack (French cartridges have no X/Z in the menu font).
+// Letters some regions lack: French cartridges have no X/Z in the menu font, and the Japanese
+// one has katakana instead of A-Z (and lacks ヲ, ー, small ャ and the dakuten marks).
 const FALLBACK_LETTERS: Record<string, string[]> = {
+  A: ['..###', '.##.##', '##...##', '##...##', '#######', '##...##', '##...##', ''],
+  B: ['######', '##...##', '##...##', '######', '##...##', '##...##', '######', ''],
+  C: ['.#####', '##...##', '##', '##', '##', '##...##', '.#####', ''],
+  D: ['#####', '##..##', '##...##', '##...##', '##...##', '##..##', '#####', ''],
+  E: ['#######', '##', '##', '######', '##', '##', '#######', ''],
+  F: ['#######', '##', '##', '######', '##', '##', '##', ''],
+  G: ['.#####', '##...##', '##', '##.####', '##...##', '##...##', '.######', ''],
+  H: ['##...##', '##...##', '##...##', '#######', '##...##', '##...##', '##...##', ''],
+  I: ['######', '..##', '..##', '..##', '..##', '..##', '######', ''],
+  J: ['....###', '.....##', '.....##', '.....##', '##...##', '##...##', '.#####', ''],
+  K: ['##...##', '##..##', '##.##', '####', '##.##', '##..##', '##...##', ''],
+  L: ['##', '##', '##', '##', '##', '##', '#######', ''],
+  M: ['##...##', '###.###', '#######', '##.#.##', '##...##', '##...##', '##...##', ''],
+  N: ['##...##', '###..##', '####.##', '##.####', '##..###', '##...##', '##...##', ''],
+  O: ['.#####', '##...##', '##...##', '##...##', '##...##', '##...##', '.#####', ''],
+  P: ['######', '##...##', '##...##', '######', '##', '##', '##', ''],
+  Q: ['.#####', '##...##', '##...##', '##...##', '##.#.##', '##..##', '.###.##', ''],
+  R: ['######', '##...##', '##...##', '######', '##.##', '##..##', '##...##', ''],
+  S: ['.#####', '##...##', '##', '.#####', '.....##', '##...##', '.#####', ''],
+  T: ['######', '..##', '..##', '..##', '..##', '..##', '..##', ''],
+  U: ['##...##', '##...##', '##...##', '##...##', '##...##', '##...##', '.#####', ''],
+  V: ['##...##', '##...##', '##...##', '##...##', '.##.##', '..###', '...#', ''],
+  W: ['##...##', '##...##', '##...##', '##.#.##', '#######', '###.###', '##...##', ''],
   X: ['##...##', '##...##', '.##.##', '..###', '.##.##', '##...##', '##...##', ''],
+  Y: ['##..##', '##..##', '##..##', '.####', '..##', '..##', '..##', ''],
   Z: ['#######', '....##', '...##', '..##', '.##', '##', '#######', ''],
+  ヲ: ['.######', '......#', '.######', '......#', '.....#', '....#', '..##', ''],
+  ー: ['', '', '', '.######', '', '', '', ''],
+  ャ: ['', '', '..#', '.#####', '..#..#', '...#', '...#', ''],
+  '・': ['', '', '', '...##', '...##', '', '', ''],
+};
+
+// Dakuten and handakuten, drawn into the top-right corner of the kana before them.
+const DAKUTEN = '\u3099';
+const HANDAKUTEN = '\u309a';
+const MARKS: Record<string, string[]> = {
+  [DAKUTEN]: ['#.#', '#.#', '', '', '', '', '', ''],
+  [HANDAKUTEN]: ['###', '#.#', '###', '', '', '', '', ''],
+};
+// Small kana the cartridge lacks read fine at full size.
+const SMALL_KANA: Record<string, string> = {
+  ァ: 'ア',
+  ィ: 'イ',
+  ゥ: 'ウ',
+  ェ: 'エ',
+  ォ: 'オ',
+  ヮ: 'ワ',
+  ヵ: 'カ',
+  ヶ: 'ケ',
 };
 
 const PUNCTUATION: Record<string, string[]> = {
@@ -35,15 +83,23 @@ const PUNCTUATION: Record<string, string[]> = {
 const punctuationGlyph = (rows: string[]) =>
   Array.from({ length: 64 }, (_, i) => (rows[i >> 3]?.[i & 7] === '#' ? 1 : 0));
 
-/** The game alphabet is uppercase only: fold case and accents (German umlauts as digraphs). */
+/**
+ * The game alphabet is uppercase only: fold case and accents (German umlauts as digraphs).
+ * Japanese folds to katakana, keeping dakuten as separate marks.
+ */
 export function fold(text: string): string {
   return text
+    .normalize('NFKC') // full-width Latin, digits and punctuation, half-width katakana
+    .replaceAll(/[\u3041-\u3096]/g, (c) => String.fromCodePoint((c.codePointAt(0) ?? 0) + 0x60)) // hiragana
+    .replaceAll(/[ァィゥェォヮヵヶ]/g, (c) => SMALL_KANA[c])
+    .replaceAll('、', ',')
+    .replaceAll('。', '.')
     .replaceAll(/[äÄ]/g, 'AE')
     .replaceAll(/[öÖ]/g, 'OE')
     .replaceAll(/[üÜ]/g, 'UE')
     .replaceAll('ß', 'SS')
     .normalize('NFD')
-    .replaceAll(/\p{M}/gu, '') // combining accents left by NFD
+    .replaceAll(/[^\P{M}\u3099\u309a]/gu, '') // combining accents left by NFD, but not dakuten
     .toUpperCase();
 }
 
@@ -56,7 +112,7 @@ export interface TextStyle {
 const DEFAULT: Required<TextStyle> = { color: '#f8f8f8', shade: '#b8b8c8', outline: '#101028' };
 
 export class PixelFont {
-  private readonly glyphs = new Map<string, { px: number[]; width: number }>();
+  private readonly glyphs = new Map<string, { px: number[]; width: number; dx?: number }>();
   private readonly cache = new Map<string, HTMLCanvasElement>();
 
   constructor(readonly atlas: Atlas) {
@@ -69,6 +125,13 @@ export class PixelFont {
       for (let i = 0; i < px.length; i++) if (px[i]) right = Math.max(right, i & 7);
       this.glyphs.set(ch, { px, width: right + 2 });
     }
+    for (const [ch, rows] of Object.entries(MARKS))
+      this.glyphs.set(ch, { px: punctuationGlyph(rows), width: 2, dx: -1 });
+  }
+
+  /** False when the text has letters this font cannot draw (kanji, for one). */
+  canRender(text: string): boolean {
+    return [...fold(text)].every((ch) => this.glyphs.has(ch) || !/\p{L}/u.test(ch));
   }
 
   measure(text: string): number {
@@ -86,14 +149,15 @@ export class PixelFont {
         x += 4;
         continue;
       }
+      const gx = x + (g.dx ?? 0);
       // Outline pass gives the game's dark drop shadow even for single-color glyphs.
       ctx.fillStyle = s.outline;
-      for (let i = 0; i < 64; i++) if (g.px[i]) ctx.fillRect(x + (i & 7) + 1, y + (i >> 3) + 1, 1, 1);
+      for (let i = 0; i < 64; i++) if (g.px[i]) ctx.fillRect(gx + (i & 7) + 1, y + (i >> 3) + 1, 1, 1);
       for (let i = 0; i < 64; i++) {
         const c = colors[g.px[i]];
         if (!c) continue;
         ctx.fillStyle = c;
-        ctx.fillRect(x + (i & 7), y + (i >> 3), 1, 1);
+        ctx.fillRect(gx + (i & 7), y + (i >> 3), 1, 1);
       }
       x += g.width;
     }

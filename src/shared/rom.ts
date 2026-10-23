@@ -1,15 +1,16 @@
-export type Locale = 'en' | 'fr' | 'de';
+export type Locale = 'en' | 'fr' | 'de' | 'ja';
 
 export interface RomInfo {
   sha1: string;
-  region: 'usa' | 'canada' | 'europe' | 'france' | 'germany';
+  region: 'usa' | 'canada' | 'europe' | 'france' | 'germany' | 'japan';
   locale: Locale;
   fps: number;
 }
 
 /**
- * Supported unheadered dumps. All five share the same WRAM layout, VRAM tile layout and HUD,
+ * Supported unheadered dumps. All six share the same WRAM layout, VRAM tile layout and HUD,
  * which was verified with the headless harness (boot, movement, damage, inventory writes).
+ * Japan 1.0 differs only in its menu font: katakana where the others have A-Z.
  */
 export const ROMS: RomInfo[] = [
   { sha1: '6d4f10a8b10e10dbe624cb23cf03b88bb8252973', region: 'usa', locale: 'en', fps: 60.0988 },
@@ -17,6 +18,7 @@ export const ROMS: RomInfo[] = [
   { sha1: '7c073a222569b9b8e8ca5fcb5dfec3b5e31da895', region: 'europe', locale: 'en', fps: 50.007 },
   { sha1: '229364a1b92a05167cd38609b1aa98f7041987cc', region: 'france', locale: 'fr', fps: 50.007 },
   { sha1: '2e62494967fb0afdf5da1635607f9641df7c6559', region: 'germany', locale: 'de', fps: 50.007 },
+  { sha1: 'e7e852f0159ce612e3911164878a9b08b3cb9060', region: 'japan', locale: 'ja', fps: 60.0988 },
 ];
 
 export const ROM_SIZE = 0x100000;

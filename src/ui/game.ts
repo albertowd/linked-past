@@ -22,7 +22,7 @@ import { appearanceDialog } from './appearance.js';
 import { controlsDialog } from './controls.js';
 import { ctx2d, h, label, panel } from './dom.js';
 import { type PixelFont, spriteCanvas } from './font.js';
-import { inviteDialog, joinDialog } from './invite.js';
+import { inviteCard, joinCard } from './invite.js';
 import { touchControls } from './touch.js';
 
 const MODE_COLOR: Record<Mode, string> = { link: '#78f878', zelda: '#f8a0d0' };
@@ -69,7 +69,9 @@ export class GameScreen implements SessionUI {
     private readonly atlas: Atlas,
     private readonly mode: Mode,
     private readonly link: Link,
+    invitedBy?: string, // host name from a room link, shown when joining
   ) {
+    this.connectCard = this.buildConnectCard(link, invitedBy);
     const mapTabs = h('div', { class: 'tabs' }, ...this.mapTabs);
     setInterval(() => this.drawMap(), 400); // blink the local player's marker
     const chatForm = h('form', { class: 'chat-form', onsubmit: (e: Event) => this.sendChat(e) }, this.chatInput);
@@ -100,28 +102,34 @@ export class GameScreen implements SessionUI {
           'header',
           {},
           label(mode === 'link' ? t.modeLink : t.modeZelda, { color: MODE_COLOR[mode] }, 2),
+          h('span', { class: 'version' }, `v${__APP_VERSION__}`),
           this.roomBadge,
           this.statusEl,
           this.savedEl,
           h(
-            'button',
-            { class: 'btn small', type: 'button', onclick: () => this.openConnect() },
-            label(link.role === 'host' ? t.invite.open : t.join.open, {}, 1),
-          ),
-          h(
-            'button',
-            { class: 'btn small', type: 'button', onclick: () => this.openAppearance() },
-            label(t.appearance.open, {}, 1),
-          ),
-          h(
-            'button',
-            { class: 'btn small', type: 'button', title: 'F1', onclick: () => this.openControls(false) },
-            label(t.controls.open, {}, 1),
+            'div',
+            { class: 'actions' },
+            h(
+              'button',
+              { class: 'btn small', type: 'button', onclick: () => this.toggleConnect() },
+              label(link.role === 'host' ? t.invite.open : t.join.open, {}, 1),
+            ),
+            h(
+              'button',
+              { class: 'btn small', type: 'button', onclick: () => this.openAppearance() },
+              label(t.appearance.open, {}, 1),
+            ),
+            h(
+              'button',
+              { class: 'btn small', type: 'button', title: 'F1', onclick: () => this.openControls(false) },
+              label(t.controls.open, {}, 1),
+            ),
           ),
         ),
-        panel('players', label(t.players), this.nearEl),
-        panel('worldmap', label(t.map), mapTabs, this.mapCanvas),
+        this.connectCard,
         panel('chat', label(t.chat), this.chatLog, chatForm),
+        panel('worldmap', label(t.map), mapTabs, this.mapCanvas),
+        panel('players', label(t.players), this.nearEl),
       ),
       this.dialog,
     );
@@ -170,9 +178,8 @@ export class GameScreen implements SessionUI {
     const saved = await db.get<ControlSettings>('controls');
     this.settings = sanitizeSettings(saved);
     this.applyControls();
-    if (!saved) this.openControls(true);
-    // Hosts start inviting and guests start joining right away (after the first-run controls).
-    this.queueDialog(() => this.openConnect());
+    // Touch devices start on the on-screen pad; the Controls button still opens this screen.
+    if (!saved && !this.coarse.matches) this.openControls(true);
   }
 
   private appearance: Appearance = {};
@@ -191,19 +198,54 @@ export class GameScreen implements SessionUI {
     );
   }
 
-  /** Invite friends (host) or paste an invite code (guest). */
-  private openConnect() {
-    const close = () => this.closeDialog();
-    if (this.link instanceof HostLink) this.openDialog(inviteDialog(this.link, close));
-    else if (this.link instanceof GuestLink) this.openDialog(joinDialog(this.link, close));
+  // ---- connecting ----------------------------------------------------------------------
+
+  private readonly connectCard: HTMLElement;
+
+  /**
+   * Sidebar card for connecting, so the game never waits behind a dialog. Hosts open it when
+   * they want to show the room QR code; guests start with it open and it folds away once they
+   * are in, coming back with a fresh code if the host is lost.
+   */
+  private buildConnectCard(link: Link, invitedBy?: string): HTMLElement {
+    let body: HTMLElement;
+    if (link instanceof HostLink) body = inviteCard(link);
+    else if (link instanceof GuestLink) {
+      const join = joinCard(link, invitedBy);
+      body = join.el;
+      link.onStatus((s) => {
+        if (s === 'online') this.toggleConnect(false);
+        else if (s === 'offline') {
+          this.toggleConnect(true);
+          join.refresh();
+        }
+      });
+    } else body = h('div', {});
+    const head = h(
+      'button',
+      { class: 'connect-head', type: 'button', onclick: () => this.toggleConnect() },
+      label(link.role === 'host' ? t.invite.title : t.join.title),
+      h('span', { class: 'arrow', ariaHidden: 'true' }, '▾'),
+    );
+    const card = panel(`connect${link.role === 'host' ? ' collapsed' : ''}`, head, body);
+    // Typing a code must not move Link; a dialog that is still open keeps input paused.
+    card.addEventListener('focusin', () => {
+      if (this.game) this.game.input.suspended = true;
+    });
+    card.addEventListener('focusout', () => {
+      if (this.game) this.game.input.suspended = !this.dialog.classList.contains('hidden');
+    });
+    return card;
   }
 
-  private readonly dialogQueue: (() => void)[] = [];
-
-  /** Opens now if nothing else is showing, otherwise right after the current dialog closes. */
-  private queueDialog(open: () => void) {
-    if (this.dialog.classList.contains('hidden')) open();
-    else this.dialogQueue.push(open);
+  /** Opens or folds the connect card; opening it also opens the drawer on landscape phones. */
+  private toggleConnect(open = this.connectCard.classList.contains('collapsed')) {
+    this.connectCard.classList.toggle('collapsed', !open);
+    if (!open) return;
+    if (this.root?.classList.contains('touch-mode')) {
+      this.root.classList.add('drawer-open');
+      this.chatBadge.classList.add('hidden');
+    }
   }
 
   private applyControls() {
@@ -292,16 +334,21 @@ export class GameScreen implements SessionUI {
 
   chat(name: string, text: string, mine: boolean) {
     const sender = this.players.find((p) => p.name === name);
+    // Text the game font cannot draw (kanji) stays one plain label, which wraps by itself.
+    const whole = label(text, {}, 2);
     this.pushChat(
       h(
         'li',
         { class: mine ? 'mine' : '' },
         label(`${name}:`, { color: sender ? MODE_COLOR[sender.mode] : '#f8d830' }, 2),
-        // One label per word so long messages wrap instead of widening the sidebar.
-        ...text
-          .split(/\s+/)
-          .filter(Boolean)
-          .map((word) => label(word, {}, 2)),
+        // One label per word so long messages wrap instead of widening the sidebar; Japanese has
+        // no spaces, so long runs are cut into chunks too.
+        ...(whole.classList.contains('text')
+          ? [whole]
+          : text
+              .split(/\s+/)
+              .flatMap((word) => word.match(/.{1,12}/gu) ?? [])
+              .map((chunk) => label(chunk, {}, 2))),
       ),
     );
   }
@@ -448,7 +495,6 @@ export class GameScreen implements SessionUI {
     this.dialog.classList.add('hidden');
     this.dialog.replaceChildren();
     if (this.game) this.game.input.suspended = false;
-    this.dialogQueue.shift()?.();
   }
 
   private sendChat(e: Event) {

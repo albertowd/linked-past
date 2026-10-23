@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { dpadDirections } from '../src/ui/touch.js';
+import { dpadAngle, dpadDirections } from '../src/ui/touch.js';
 
 const dirs = (dx: number, dy: number) => [...dpadDirections(dx, dy, 100)].sort();
 
@@ -22,4 +22,17 @@ test('dead zone in the middle and sector edges', () => {
   assert.deepEqual(dirs(5, 5), []);
   assert.deepEqual(dirs(80, 25), ['RIGHT'], '17° stays cardinal');
   assert.deepEqual(dirs(80, 45), ['DOWN', 'RIGHT'], '29° is diagonal');
+});
+
+test('the indicator points at all 8 directions', () => {
+  const angle = (dx: number, dy: number) => dpadAngle(dpadDirections(dx, dy, 100));
+  assert.equal(angle(0, -80), 0);
+  assert.equal(angle(60, -60), 45);
+  assert.equal(angle(80, 0), 90);
+  assert.equal(angle(60, 60), 135);
+  assert.equal(angle(0, 80), 180);
+  assert.equal(angle(-60, 60), 225);
+  assert.equal(angle(-80, 0), 270);
+  assert.equal(angle(-60, -60), 315);
+  assert.equal(angle(5, 5), undefined);
 });

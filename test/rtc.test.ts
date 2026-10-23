@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CodeError, decodeCode, encodeCode, isIPv4, withAddress } from '../src/net/rtc.js';
+import { CodeError, codeFromText, decodeCode, encodeCode, isIPv4, withAddress } from '../src/net/rtc.js';
 import { NET } from '../src/shared/index.js';
 
 const SDP = [
@@ -16,27 +16,36 @@ const SDP = [
 ].join('\r\n');
 
 test('codes round-trip and stay compact', async () => {
-  const code = await encodeCode('invite', SDP, 'Hosty');
-  assert.match(code, /^HWI\.[A-Za-z0-9_-]+$/);
+  const code = await encodeCode('request', SDP, 'Guesty');
+  assert.match(code, /^HWQ\.[A-Za-z0-9_-]+$/);
   assert.ok(code.length < SDP.length, 'compressed');
-  assert.deepEqual(await decodeCode('invite', code), { sdp: SDP, name: 'Hosty' });
+  assert.deepEqual(await decodeCode('request', code), { sdp: SDP, name: 'Guesty' });
   // Pasted with line breaks or spaces from a chat app still works.
-  assert.equal((await decodeCode('invite', `  ${code.slice(0, 20)}\n${code.slice(20)} `)).sdp, SDP);
+  assert.equal((await decodeCode('request', `  ${code.slice(0, 20)}\n${code.slice(20)} `)).sdp, SDP);
+});
+
+test('a room code only names the room and stays tiny', async () => {
+  const room = await encodeCode('room', '', 'Hosty');
+  assert.match(room, /^HWT\./);
+  assert.ok(room.length < 60, room);
+  assert.deepEqual(await decodeCode('room', room), { sdp: '', name: 'Hosty' });
+  assert.equal(codeFromText(`https://example.org/play/#room=${room}`), room, 'room link');
+  assert.equal(codeFromText(room), room, 'bare code');
 });
 
 test('wrong, mixed-up and garbage codes are rejected', async () => {
-  const reply = await encodeCode('reply', SDP);
-  await assert.rejects(decodeCode('invite', reply), (e) => e instanceof CodeError && e.code === 'wrong_kind');
-  await assert.rejects(decodeCode('invite', 'hello'), (e) => e instanceof CodeError && e.code === 'bad_code');
-  await assert.rejects(decodeCode('invite', 'HWI.@@@@'), (e) => e instanceof CodeError && e.code === 'bad_code');
+  const answer = await encodeCode('answer', SDP);
+  await assert.rejects(decodeCode('request', answer), (e) => e instanceof CodeError && e.code === 'wrong_kind');
+  await assert.rejects(decodeCode('request', 'hello'), (e) => e instanceof CodeError && e.code === 'bad_code');
+  await assert.rejects(decodeCode('request', 'HWQ.@@@@'), (e) => e instanceof CodeError && e.code === 'bad_code');
 });
 
 test('codes from another app version are refused', async () => {
   const original = NET.protocol;
-  const code = await encodeCode('invite', SDP);
+  const code = await encodeCode('answer', SDP);
   (NET as { protocol: number }).protocol = original + 1;
   try {
-    await assert.rejects(decodeCode('invite', code), (e) => e instanceof CodeError && e.code === 'version_mismatch');
+    await assert.rejects(decodeCode('answer', code), (e) => e instanceof CodeError && e.code === 'version_mismatch');
   } finally {
     (NET as { protocol: number }).protocol = original;
   }

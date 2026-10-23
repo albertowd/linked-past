@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import json from '../../src/shared/data/rom-challenges.json' with { type: 'json' };
+import { ROMS } from '../../src/shared/rom.js';
 import { type ChallengeTable, checkProof, createProof, proofRanges } from '../../src/shared/romProof.js';
 
 const table = json as unknown as ChallengeTable;
@@ -10,7 +11,7 @@ import { defined } from './helpers.js';
 const USA = '6d4f10a8b10e10dbe624cb23cf03b88bb8252973';
 
 test('challenges cover every supported ROM', () => {
-  assert.equal(Object.keys(table).length, 5);
+  assert.equal(Object.keys(table).length, ROMS.length);
 });
 
 test('a proof needs the exact digests in order', () => {

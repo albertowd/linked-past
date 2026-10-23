@@ -1,21 +1,24 @@
-// Local-network WebRTC with manual signaling: the offer/answer travel as copy-paste codes, and
-// no ICE servers are configured, so only local (LAN / virtual LAN) addresses are ever used.
+// Local-network WebRTC with manual signaling: the offer/answer travel as codes (QR or copy-paste),
+// and no ICE servers are configured, so only local (LAN / virtual LAN) addresses are ever used.
+// The host's room code never changes: it only names the room. Each guest makes the offer (a
+// request code) and the host answers it (an answer code), one pair per guest.
 import { NET } from '../shared/index.js';
 
 export const RTC_CONFIG: RTCConfiguration = { iceServers: [] };
 
 const GATHER_TIMEOUT_MS = 4000;
 
-export type CodeKind = 'invite' | 'reply';
+export type CodeKind = 'room' | 'request' | 'answer';
 
 interface CodePayload {
   v: number; // NET.protocol
-  k: 'i' | 'r';
-  s: string; // SDP
+  k: 't' | 'q' | 'a';
+  s: string; // SDP (empty in a room code)
   n?: string; // who made it (shown to the other side)
 }
 
-const PREFIX = { invite: 'HWI', reply: 'HWR' } as const;
+const PREFIX = { room: 'HWT', request: 'HWQ', answer: 'HWA' } as const;
+const KIND_KEY = { room: 't', request: 'q', answer: 'a' } as const;
 
 function toBase64Url(bytes: Uint8Array): string {
   let bin = '';
@@ -36,11 +39,11 @@ async function pipe(data: Uint8Array, stream: CompressionStream | DecompressionS
   return new Uint8Array(await new Response(out).arrayBuffer());
 }
 
-/** Compressed, URL-safe code for an SDP (about 400–700 characters). */
+/** Compressed, URL-safe code for an SDP (about 400–700 characters; a room code is tiny). */
 export async function encodeCode(kind: CodeKind, sdp: string, name?: string): Promise<string> {
   const payload: CodePayload = {
     v: NET.protocol,
-    k: kind === 'invite' ? 'i' : 'r',
+    k: KIND_KEY[kind],
     s: sdp,
     ...(name ? { n: name } : {}),
   };
@@ -68,9 +71,21 @@ export async function decodeCode(kind: CodeKind, text: string): Promise<{ sdp: s
     throw new CodeError('bad_code');
   }
   if (payload.v !== NET.protocol) throw new CodeError('version_mismatch');
-  if (typeof payload.s !== 'string') throw new CodeError('bad_code');
+  if (typeof payload.s !== 'string' || payload.k !== KIND_KEY[kind]) throw new CodeError('bad_code');
   return { sdp: payload.s, name: typeof payload.n === 'string' ? payload.n.slice(0, 16) : undefined };
 }
+
+/** A link that opens the app ready to join this room (the room QR code holds it). */
+export const roomLink = (room: string) => `${location.origin}${location.pathname}#room=${room}`;
+
+/** The code inside a room link, or the text itself when it is a bare code. */
+export const codeFromText = (text: string) => new URLSearchParams(text.split('#')[1] ?? '').get('room') ?? text;
+
+/** The room code carried by the page's own address, if it was opened from a room link. */
+export const linkedRoom = () => new URLSearchParams(location.hash.slice(1)).get('room') ?? undefined;
+
+/** Removes the room from the address once used, so a reload starts clean. */
+export const clearLinkedRoom = () => history.replaceState(null, '', location.pathname + location.search);
 
 const IPV4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
 

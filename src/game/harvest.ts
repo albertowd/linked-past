@@ -20,12 +20,15 @@ export interface Atlas {
 
 export const ATLAS_VERSION = 3;
 
-// BG3 tile numbers, identical across USA/Canada/Europe/France/Germany. The first row is
-// A-P everywhere; French cartridges have no X or Z in the second row (the UI font supplies them).
-const LETTER_ROWS: Record<Locale, [string, string]> = {
+// BG3 tile numbers, identical across all supported cartridges. The first row is A-P on the
+// western ones; French cartridges have no X or Z in the second row. The Japanese cartridge has
+// katakana there instead (no ヲ, ー, dakuten or small ャ) and no Latin letters at all: the UI
+// font supplies whatever is missing.
+const LETTER_ROWS: Record<Locale, string[]> = {
   en: ['ABCDEFGHIJKLMNOP', 'QRSTUVWXYZ'],
   de: ['ABCDEFGHIJKLMNOP', 'QRSTUVWXYZ'],
   fr: ['ABCDEFGHIJKLMNOP', 'QRSTUVWY'],
+  ja: ['アイウエオカキクケコサシスセソタ', 'チツテトナニヌネノハヒフヘホマミ', 'ムメモヤユヨラリルレロワンョッュ'],
 };
 const DIGIT_TILE = 0x90;
 const HEART_TILES = { heart: 0xa0, halfHeart: 0xa1, emptyHeart: 0xa2 } as const;
@@ -83,10 +86,13 @@ function glyphSprite(core: Core, tile: number): Sprite {
 /**
  * Menu letters are drawn as a stroke on a filled cell, HUD digits as a stroke with an
  * outline, and the index layout varies by region. Normalize to 0 transparent, 1 main
- * stroke, 2 shade, 3 outline: the corner color is background, the rest ranked by brightness.
+ * stroke, 2 shade, 3 outline: the usual corner color is background (some katakana start with a
+ * stroke in the top-left corner), the rest ranked by brightness.
  */
 export function normalizeGlyph(px: number[], luminance: (v: number) => number): number[] {
-  const bg = px[0];
+  const corners = [px[0], px[7], px[56], px[63]];
+  const seen = (v: number) => corners.filter((c) => c === v).length;
+  const bg = corners.reduce((best, v) => (seen(v) > seen(best) ? v : best));
   const values = [...new Set(px)].filter((v) => v !== 0 && v !== bg).sort((a, b) => luminance(b) - luminance(a));
   const rankOf = (i: number) => {
     if (values.length === 1) return 1;

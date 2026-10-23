@@ -4,9 +4,10 @@
 import { saveKey } from '../game/session.js';
 import { t } from '../i18n.js';
 import * as db from '../rom/db.js';
-import type { Cartridge } from '../rom/rom.js';
+import { type Cartridge, forget } from '../rom/rom.js';
 import type { Mode } from '../shared/index.js';
 import { h, label, panel } from './dom.js';
+import { appIcon, cartridgeIcon } from './icons.js';
 
 export interface StartChoice {
   role: 'host' | 'guest';
@@ -17,6 +18,12 @@ export interface StartChoice {
 interface Remembered {
   name?: string;
   mode?: Mode;
+}
+
+/** Forgets the stored ROM; the reload starts over at the cartridge picker. */
+async function changeRom() {
+  await forget();
+  location.reload();
 }
 
 const NAME = /^[\p{L}\p{N} _-]{1,16}$/u;
@@ -55,7 +62,13 @@ function saveControls(cart: Cartridge, note: HTMLElement) {
   );
 }
 
-export async function startScreen(cart: Cartridge, show: (...n: Node[]) => void, error?: string): Promise<StartChoice> {
+/** `invitedBy` is the host's name when the page was opened from a join link. */
+export async function startScreen(
+  cart: Cartridge,
+  show: (...n: Node[]) => void,
+  error?: string,
+  invitedBy?: string,
+): Promise<StartChoice> {
   const saved = (await db.get<Remembered>('start')) ?? {};
   let mode: Mode = saved.mode ?? 'link';
   return new Promise((resolve) => {
@@ -100,6 +113,9 @@ export async function startScreen(cart: Cartridge, show: (...n: Node[]) => void,
           go('guest');
         },
       },
+      invitedBy === undefined
+        ? ''
+        : h('p', { class: 'invited' }, `${t.join.from} ${invitedBy || '?'}. ${t.join.linkHelp}`),
       label(t.modeTitle, {}, 2),
       modes,
       name,
@@ -108,15 +124,36 @@ export async function startScreen(cart: Cartridge, show: (...n: Node[]) => void,
         { class: 'row' },
         h(
           'button',
-          { class: 'btn primary', type: 'button', title: t.hostHelp, onclick: () => go('host') },
+          {
+            class: invitedBy === undefined ? 'btn primary' : 'btn',
+            type: 'button',
+            title: t.hostHelp,
+            onclick: () => go('host'),
+          },
           label(t.hostRoom),
         ),
-        h('button', { class: 'btn', type: 'submit', title: t.joinHelp }, label(t.joinRoom)),
+        h(
+          'button',
+          { class: invitedBy === undefined ? 'btn' : 'btn primary', type: 'submit', title: t.joinHelp },
+          label(t.joinRoom),
+        ),
       ),
       err,
       saveControls(cart, note),
+      h(
+        'div',
+        { class: 'row saves' },
+        label(t.cartridge, { color: '#b8b8c8' }, 1),
+        h(
+          'button',
+          { class: 'btn small', type: 'button', onclick: () => void changeRom() },
+          cartridgeIcon(),
+          label(t.changeRom, {}, 1),
+        ),
+      ),
       note,
+      h('p', { class: 'version' }, `v${__APP_VERSION__}`),
     );
-    show(panel('center', h('h1', { class: 'logo' }, label('LINKED PAST', { color: '#f8d830' }, 4)), form));
+    show(panel('center', appIcon(), h('h1', { class: 'logo' }, label('LINKED PAST', { color: '#f8d830' }, 4)), form));
   });
 }

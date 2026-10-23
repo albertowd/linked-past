@@ -1,6 +1,7 @@
 import basicSsl from '@vitejs/plugin-basic-ssl';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import pkg from './package.json' with { type: 'json' };
 
 // HTTPS=1 serves over HTTPS with a self-signed certificate (npm run lan), so friends on the
 // LAN or a Radmin/Hamachi network get a secure context: Web Crypto, AudioWorklet, gamepads and
@@ -9,6 +10,7 @@ const https = process.env.HTTPS === '1';
 
 export default defineConfig({
   base: process.env.BASE ?? '/',
+  define: { __APP_VERSION__: JSON.stringify(pkg.version) }, // shown in the UI
   build: { target: 'es2022' }, // top-level await in main.ts
   worker: { format: 'es' },
   server: { port: 5173 },

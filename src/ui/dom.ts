@@ -32,12 +32,16 @@ export function byId(id: string): HTMLElement {
 let font: PixelFont | undefined;
 export const setFont = (f: PixelFont) => (font = f);
 
-/** Text in the game font when the atlas is ready, plain text before that. */
+/** Text in the game font when the atlas is ready and has every letter, plain text otherwise. */
 export function label(text: string, style?: TextStyle, scale = 2): HTMLElement {
   const wrap = h('span', { class: 'label', title: text });
   wrap.style.setProperty('--s', String(scale));
-  if (font) wrap.append(font.canvas(text, style));
-  else wrap.textContent = text;
+  if (font?.canRender(text)) wrap.append(font.canvas(text, style));
+  else {
+    wrap.textContent = text;
+    wrap.classList.add('text');
+    if (style?.color) wrap.style.color = style.color;
+  }
   wrap.setAttribute('aria-label', text);
   return wrap;
 }

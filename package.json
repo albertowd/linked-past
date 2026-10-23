@@ -1,4 +1,8 @@
 {
+  "dependencies": {
+    "jsqr": "1.4.0",
+    "uqr": "0.1.3"
+  },
   "description": "Play A Link to the Past together in your browser. Bring your own ROM, host a room on your local network, no servers.",
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
@@ -29,5 +33,5 @@
     "typecheck": "tsc -p ."
   },
   "type": "module",
-  "version": "0.1.0"
+  "version": "0.2.0"
 }

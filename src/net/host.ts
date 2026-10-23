@@ -3,26 +3,25 @@ import type { FromWorker, ToWorker } from './hostWorker.js';
 import { type Link, LinkBase } from './link.js';
 import { decodeCode, encodeCode, iceGathered, localSdp, RTC_CONFIG } from './rtc.js';
 
-export type InviteState = 'waiting' | 'connecting' | 'connected' | 'closed' | 'failed';
+export type GuestState = 'waiting' | 'connected' | 'closed' | 'failed';
 
-export interface Invite {
+/** One friend being let in: their request answered, waiting for them to read the answer code. */
+export interface Admission {
   readonly id: string;
-  readonly code: string;
-  state: InviteState;
-  guestName?: string;
-  /** Paste the friend's reply code. Throws CodeError for malformed codes. */
-  accept(reply: string): Promise<void>;
+  readonly answer: string;
+  readonly guestName?: string;
+  state: GuestState;
   cancel(): void;
   onChange(fn: () => void): void;
 }
 
-/** This browser hosts the room: the World runs in a worker, friends connect with invite codes. */
+/** This browser hosts the room: the World runs in a worker, friends connect with codes. */
 export class HostLink extends LinkBase implements Link {
   readonly role = 'host';
   private readonly worker: Worker;
   private readonly channels = new Map<string, RTCDataChannel>();
-  readonly invites: Invite[] = [];
-  private readonly inviteListeners = new Set<() => void>();
+  readonly admissions: Admission[] = [];
+  private roomCodePromise?: Promise<string>;
 
   constructor(
     readonly room: string,
@@ -35,68 +34,62 @@ export class HostLink extends LinkBase implements Link {
     this.post({ k: 'msg', peer: LOCAL_PEER, msg: { t: 'hello', hello: { ...hello, v: NET.protocol } } });
   }
 
-  onInvites(fn: () => void) {
-    this.inviteListeners.add(fn);
-    return () => this.inviteListeners.delete(fn);
+  /** The room's code: the same for every friend for as long as this room is open. */
+  roomCode(): Promise<string> {
+    this.roomCodePromise ??= encodeCode('room', '', this.hello.name);
+    return this.roomCodePromise;
   }
 
-  private invitesChanged() {
-    for (const fn of this.inviteListeners) fn();
-  }
-
-  /** Creates a one-use invite: a code for one friend, completed by their reply code. */
-  async invite(address?: string): Promise<Invite> {
+  /** Answers a friend's request code. Throws CodeError for malformed codes. */
+  async admit(request: string, address?: string): Promise<Admission> {
+    const { sdp, name } = await decodeCode('request', request);
     const id = crypto.randomUUID();
     const pc = new RTCPeerConnection(RTC_CONFIG);
-    const channel = pc.createDataChannel('game', { ordered: true });
-    await pc.setLocalDescription(await pc.createOffer());
+    await pc.setRemoteDescription({ type: 'offer', sdp });
+    await pc.setLocalDescription(await pc.createAnswer());
     await iceGathered(pc);
-    const code = await encodeCode('invite', localSdp(pc, address), this.hello.name);
     const listeners = new Set<() => void>();
-    const invite: Invite = {
+    const admission: Admission = {
       id,
-      code,
+      answer: await encodeCode('answer', localSdp(pc, address), this.hello.name),
+      guestName: name,
       state: 'waiting',
-      accept: async (reply) => {
-        const { sdp, name } = await decodeCode('reply', reply);
-        invite.guestName = name;
-        set('connecting');
-        await pc.setRemoteDescription({ type: 'answer', sdp });
-      },
       cancel: () => {
         pc.close();
         set('closed');
       },
       onChange: (fn) => listeners.add(fn),
     };
-    const set = (state: InviteState) => {
-      invite.state = state;
+    const set = (state: GuestState) => {
+      admission.state = state;
       for (const fn of listeners) fn();
-      this.invitesChanged();
     };
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'failed') set('failed');
     };
-    channel.onopen = () => {
-      set('connected');
-      this.channels.set(id, channel);
-      this.post({ k: 'connect', peer: id });
+    // The guest opens the channel, since it made the offer.
+    pc.ondatachannel = ({ channel }) => {
+      channel.onopen = () => {
+        set('connected');
+        this.channels.set(id, channel);
+        this.post({ k: 'connect', peer: id });
+      };
+      channel.onmessage = (e) => {
+        try {
+          this.post({ k: 'msg', peer: id, msg: JSON.parse(String(e.data)) as ClientMessage });
+        } catch {
+          /* ignore malformed frames */
+        }
+      };
+      channel.onclose = () => {
+        this.channels.delete(id);
+        this.post({ k: 'disconnect', peer: id });
+        if (admission.state === 'connected') set('closed');
+      };
+      if (channel.readyState === 'open') channel.onopen(new Event('open'));
     };
-    channel.onmessage = (e) => {
-      try {
-        this.post({ k: 'msg', peer: id, msg: JSON.parse(String(e.data)) as ClientMessage });
-      } catch {
-        /* ignore malformed frames */
-      }
-    };
-    channel.onclose = () => {
-      this.channels.delete(id);
-      this.post({ k: 'disconnect', peer: id });
-      if (invite.state === 'connected') set('closed');
-    };
-    this.invites.push(invite);
-    this.invitesChanged();
-    return invite;
+    this.admissions.push(admission);
+    return admission;
   }
 
   private post(m: ToWorker) {
@@ -123,7 +116,7 @@ export class HostLink extends LinkBase implements Link {
 
   close() {
     for (const channel of this.channels.values()) channel.close();
-    for (const invite of this.invites) invite.cancel();
+    for (const admission of this.admissions) admission.cancel();
     this.worker.terminate();
     this.setStatus('offline');
   }

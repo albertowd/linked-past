@@ -22,3 +22,20 @@ test('glyph widths are proportional; unknown characters advance a space', () => 
   assert.ok(font.measure('X') > 4, 'fallback X exists for regions without one');
   assert.ok(font.measure('!') > 0, 'punctuation is provided');
 });
+
+test('Japanese folds to katakana and keeps dakuten as marks', () => {
+  assert.equal(fold('ぼうけん'), 'ボウケン');
+  assert.equal(fold('パーティ'), 'パーテイ', 'small kana the cartridge lacks become full size');
+  assert.equal(fold('ｶﾞﾝﾅﾝ、ＯＫ。'), 'ガンナン,OK.');
+});
+
+test('kanji cannot be drawn, so labels fall back to plain text', () => {
+  const kana = Array(64).fill(0);
+  kana[6] = 1;
+  const atlas = { version: 3, glyphs: { カ: kana, ン: kana }, icons: {} } as unknown as Atlas;
+  const font = new PixelFont(atlas);
+  assert.ok(font.canRender('ガン 12!'), 'kana, marks, digits and punctuation');
+  assert.ok(font.canRender('Link'), 'every Latin letter has a fallback');
+  assert.ok(!font.canRender('勇者'));
+  assert.equal(font.measure('ガ'), font.measure('カ') + 2, 'dakuten tucks into the corner');
+});

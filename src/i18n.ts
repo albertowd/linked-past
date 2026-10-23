@@ -1,15 +1,17 @@
-// UI language follows the cartridge region (USA/Europe: en, Canada/France: fr, Germany: de).
+// UI language follows the cartridge region (USA/Europe: en, Canada/France: fr, Germany: de,
+// Japan: ja).
 // Catalogs live in ./locales as plain JSON so translators can edit them without touching code.
 
 import de from './locales/de.json';
 import en from './locales/en.json';
 import fr from './locales/fr.json';
+import ja from './locales/ja.json';
 import type { Locale } from './shared/index.js';
 
 // Errors are looked up by server error code, so any string key is allowed there.
 export type Strings = Omit<typeof en, 'errors'> & { errors: Record<string, string> };
 
-export const catalogs: Record<Locale, Strings> = { en, fr, de };
+export const catalogs: Record<Locale, Strings> = { en, fr, de, ja };
 
 /** Current strings. Mutated in place by setLocale so importers always see the active locale. */
 export const t: Strings = structuredClone(en);
@@ -21,5 +23,5 @@ export function setLocale(locale: Locale) {
 
 export function browserLocale(): Locale {
   const l = navigator.language.slice(0, 2);
-  return l === 'fr' || l === 'de' ? l : 'en';
+  return l === 'fr' || l === 'de' || l === 'ja' ? l : 'en';
 }

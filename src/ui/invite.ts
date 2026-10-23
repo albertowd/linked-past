@@ -1,29 +1,34 @@
-// Manual signaling UI: the host hands out invite codes and pastes reply codes; a guest pastes
-// an invite and sends back the reply. Codes travel however friends like (chat, message...).
+// Manual signaling UI. The host shows one room QR code for everyone; it opens the game ready to
+// join. Each friend then shows the host a request code, and the host shows back an answer code.
+// Codes travel as QR codes (scanned with the camera) or as text, however friends like.
 
 import { t } from '../i18n.js';
 import type { GuestLink } from '../net/guest.js';
-import type { HostLink, Invite } from '../net/host.js';
-import { CodeError, isIPv4 } from '../net/rtc.js';
+import type { Admission, HostLink } from '../net/host.js';
+import { CodeError, isIPv4, roomLink } from '../net/rtc.js';
 import { h, label } from './dom.js';
+import { qrCode, scanButton } from './qr.js';
 
 const codeBox = (value = '', readOnly = false) =>
-  h('textarea', { class: 'code', rows: 4, spellcheck: false, readOnly, value, autocomplete: 'off' });
+  h('textarea', { class: 'code', rows: 3, spellcheck: false, readOnly, value, autocomplete: 'off' });
 
-function copyButton(box: HTMLTextAreaElement) {
-  const btn = h('button', { class: 'btn small', type: 'button' }, label(t.invite.copy, {}, 1));
+function copyButton(box: HTMLTextAreaElement, text = () => box.value, name = t.invite.copy) {
+  const btn = h('button', { class: 'btn small', type: 'button' }, label(name, {}, 1));
   btn.onclick = async () => {
     box.select();
     try {
-      await navigator.clipboard.writeText(box.value);
+      await navigator.clipboard.writeText(text());
     } catch {
       return; // clipboard blocked: the code stays selected for Ctrl/Cmd+C
     }
     btn.replaceChildren(label(t.invite.copied, { color: '#78f878' }, 1));
-    setTimeout(() => btn.replaceChildren(label(t.invite.copy, {}, 1)), 1500);
+    setTimeout(() => btn.replaceChildren(label(name, {}, 1)), 1500);
   };
   return btn;
 }
+
+/** Links to localhost only open on this computer, so a QR code of one is useless to friends. */
+const LOCAL_ONLY = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
 
 const codeError = (e: unknown) =>
   e instanceof CodeError ? (t.connect[e.code as keyof typeof t.connect] ?? t.errors[e.code] ?? e.code) : String(e);
@@ -34,111 +39,138 @@ function addressField() {
   return { field, value: () => (isIPv4(input.value) ? input.value.trim() : undefined) };
 }
 
-function inviteCard(invite: Invite) {
-  const reply = codeBox();
-  const err = h('p', { class: 'error' });
+/** One friend being let in: their name, the answer for them to scan, and how it is going. */
+function admissionCard(a: Admission) {
   const state = h('p', { class: 'hint' });
-  const connect = h('button', { class: 'btn primary small', type: 'button' }, label(t.invite.connect, {}, 1));
+  const answer = h('div', { class: 'answer' });
+  const box = codeBox(a.answer, true);
   const render = () => {
-    const who = invite.guestName ? `${invite.guestName}: ` : '';
-    state.textContent = who + t.invite.states[invite.state];
-    const done = invite.state !== 'waiting';
-    reply.disabled = done;
-    connect.disabled = done;
+    state.textContent = `${a.guestName ?? '?'}: ${t.invite.states[a.state]}`;
+    // The answer is only useful until they have read it.
+    answer.classList.toggle('hidden', a.state !== 'waiting');
   };
-  connect.onclick = async () => {
-    err.textContent = '';
-    try {
-      await invite.accept(reply.value);
-    } catch (e) {
-      err.textContent = codeError(e);
-    }
-  };
-  invite.onChange(render);
+  a.onChange(render);
+  answer.append(qrCode(a.answer), box, h('div', { class: 'row' }, copyButton(box)));
   render();
-  const box = codeBox(invite.code, true);
-  return h(
-    'div',
-    { class: 'invite' },
-    h('p', {}, t.invite.step1),
-    box,
-    h('div', { class: 'row' }, copyButton(box)),
-    h('p', {}, t.invite.step2),
-    reply,
-    h('div', { class: 'row' }, connect),
-    state,
-    err,
-  );
+  return h('div', { class: 'invite' }, state, answer);
 }
 
-export function inviteDialog(host: HostLink, close: () => void): HTMLElement {
+/** Body of the host's sidebar card: the room QR code, and letting each friend in. */
+export function inviteCard(host: HostLink): HTMLElement {
+  const roomQr = h('div', {});
+  const linkBox = Object.assign(codeBox('', true), { rows: 1 });
+  void host.roomCode().then((code) => {
+    linkBox.value = roomLink(code);
+    roomQr.replaceChildren(qrCode(linkBox.value));
+  });
+  const request = codeBox();
+  const err = h('p', { class: 'error' });
   const list = h('div', { class: 'invites' });
   const address = addressField();
-  const more = h('button', { class: 'btn', type: 'button' }, label(t.invite.another, {}, 1));
-  const create = async () => {
-    more.disabled = true;
+  const add = h('button', { class: 'btn primary small', type: 'button' }, label(t.invite.connect, {}, 1));
+  add.onclick = async () => {
+    err.textContent = '';
+    if (!request.value.trim()) return;
+    add.disabled = true;
     const pending = h('p', { class: 'hint' }, t.invite.generating);
     list.prepend(pending);
     try {
-      pending.replaceWith(inviteCard(await host.invite(address.value())));
+      const card = admissionCard(await host.admit(request.value, address.value()));
+      pending.replaceWith(card);
+      request.value = '';
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' }); // the friend scans it next
+    } catch (e) {
+      pending.remove();
+      err.textContent = codeError(e);
     } finally {
-      more.disabled = false;
+      add.disabled = false;
     }
   };
-  more.onclick = () => void create();
-  // Show the open invites again, then make a fresh one if none is waiting for a reply.
-  for (const inv of host.invites.filter((i) => i.state === 'waiting' || i.state === 'connecting').reverse())
-    list.append(inviteCard(inv));
-  if (!list.children.length) void create();
   return h(
     'div',
-    { class: 'connect-dialog' },
-    label(t.invite.title, { color: '#f8d830' }, 2),
+    { class: 'connect-body' },
+    h('p', {}, t.invite.step1),
+    roomQr,
+    h('p', { class: 'hint' }, LOCAL_ONLY ? t.invite.localOnly : t.invite.qrHelp),
+    linkBox,
+    h(
+      'div',
+      { class: 'row' },
+      copyButton(linkBox, () => linkBox.value, t.invite.copyLink),
+    ),
+    h('p', {}, t.invite.step2),
+    request,
+    h(
+      'div',
+      { class: 'row' },
+      scanButton(
+        request,
+        (msg) => (err.textContent = msg),
+        () => add.click(),
+      ),
+      add,
+    ),
+    err,
     list,
-    h('div', { class: 'row' }, more),
     address.field,
-    h('div', { class: 'row' }, h('button', { class: 'btn', type: 'button', onclick: close }, label(t.controls.close))),
   );
 }
 
-export function joinDialog(guest: GuestLink, close: () => void): HTMLElement {
-  const invite = codeBox();
-  const reply = codeBox('', true);
+/**
+ * Body of a guest's sidebar card: their request code for the host, and reading back the answer.
+ * `invitedBy` is the host's name when the game was opened from their room link. `refresh` makes
+ * a new request code after the connection to the host is lost.
+ */
+export function joinCard(guest: GuestLink, invitedBy?: string): { el: HTMLElement; refresh: () => void } {
+  const requestQr = h('div', {});
+  const request = codeBox('', true);
+  const answer = codeBox();
   const err = h('p', { class: 'error' });
-  const from = h('p', { class: 'hint' });
   const address = addressField();
-  const step2 = h(
-    'div',
-    { class: 'hidden' },
-    h('p', {}, t.join.step2),
-    reply,
-    h('div', { class: 'row' }, copyButton(reply)),
-  );
-  const make = h('button', { class: 'btn primary', type: 'button' }, label(t.join.makeReply, {}, 1));
-  make.onclick = async () => {
+  const make = async () => {
     err.textContent = '';
-    make.disabled = true;
+    answer.value = '';
+    requestQr.replaceChildren(h('p', { class: 'hint' }, t.invite.generating));
+    request.value = await guest.makeRequest(address.value());
+    requestQr.replaceChildren(qrCode(request.value));
+  };
+  void make();
+  const connect = h('button', { class: 'btn primary small', type: 'button' }, label(t.join.connect, {}, 1));
+  connect.onclick = async () => {
+    err.textContent = '';
     try {
-      reply.value = await guest.join(invite.value, address.value());
-      from.textContent = guest.hostName ? `${t.join.from} ${guest.hostName}` : '';
-      step2.classList.remove('hidden');
+      await guest.answer(answer.value);
     } catch (e) {
       err.textContent = codeError(e);
-    } finally {
-      make.disabled = false;
     }
   };
-  return h(
-    'div',
-    { class: 'connect-dialog' },
-    label(t.join.title, { color: '#f8d830' }, 2),
-    h('p', {}, t.join.step1),
-    invite,
-    h('div', { class: 'row' }, make),
-    from,
-    err,
-    step2,
-    address.field,
-    h('div', { class: 'row' }, h('button', { class: 'btn', type: 'button', onclick: close }, label(t.controls.close))),
+  const fresh = h(
+    'button',
+    { class: 'btn small', type: 'button', onclick: () => void make() },
+    label(t.join.newCode, {}, 1),
   );
+  const el = h(
+    'div',
+    { class: 'connect-body' },
+    invitedBy === undefined ? '' : h('p', { class: 'hint' }, `${t.join.from} ${invitedBy || '?'}`),
+    h('p', {}, t.join.step1),
+    requestQr,
+    request,
+    h('div', { class: 'row' }, copyButton(request), fresh),
+    h('p', {}, t.join.step2),
+    answer,
+    h(
+      'div',
+      { class: 'row' },
+      scanButton(
+        answer,
+        (msg) => (err.textContent = msg),
+        () => connect.click(),
+      ),
+      connect,
+    ),
+    err,
+    address.field,
+  );
+  return { el, refresh: () => void make() };
 }

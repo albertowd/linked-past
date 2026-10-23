@@ -21,11 +21,32 @@ export function dpadDirections(dx: number, dy: number, radius: number, deadZone 
   return out;
 }
 
+/** Which of the 8 D-pad directions a set of pressed directions points, in degrees clockwise from up. */
+export function dpadAngle(dirs: Set<Dir>): number | undefined {
+  const dx = Number(dirs.has('RIGHT')) - Number(dirs.has('LEFT'));
+  const dy = Number(dirs.has('DOWN')) - Number(dirs.has('UP'));
+  if (!dx && !dy) return undefined;
+  return ((Math.atan2(dx, -dy) * 180) / Math.PI + 360) % 360;
+}
+
 const buzz = () => navigator.vibrate?.(8);
+
+// The cross is one outline (no seam where the arms meet), with an arrowhead inside the end of
+// each arm. The glow sits on the pressed direction, diagonals included.
+const ARROW = 'M50 13 L58 23 H42 Z';
+const DPAD_SVG = `<svg viewBox="0 0 100 100" aria-hidden="true">
+  <defs><radialGradient id="tpad-glow"><stop offset="0" stop-color="#f8d830" stop-opacity="0.8"/>
+  <stop offset="1" stop-color="#f8d830" stop-opacity="0"/></radialGradient></defs>
+  <path class="cross" d="M36 7 H64 V36 H93 V64 H64 V93 H36 V64 H7 V36 H36 Z"/>
+  <g class="glow"><circle cx="50" cy="16" r="22" fill="url(#tpad-glow)"/></g>
+  ${DIRS.map((d, i) => `<path class="arrow" data-d="${d}" d="${ARROW}" transform="rotate(${[0, 180, 270, 90][i]} 50 50)"/>`).join('')}
+</svg>`;
 
 /** D-pad: one surface, direction from the thumb's position, so sliding between directions works. */
 function dpad(set: (b: Button, down: boolean) => void): HTMLElement {
   const el = h('div', { class: 'tpad', role: 'group', ariaLabel: 'D-pad' });
+  el.innerHTML = DPAD_SVG;
+  const glow = el.querySelector<SVGGElement>('.glow');
   let held = new Set<Dir>();
   const update = (e: PointerEvent | null) => {
     let next = new Set<Dir>();
@@ -37,6 +58,8 @@ function dpad(set: (b: Button, down: boolean) => void): HTMLElement {
     if (next.size > held.size) buzz();
     held = next;
     el.dataset.dir = [...next].join(' ');
+    const angle = dpadAngle(next);
+    if (angle !== undefined) glow?.setAttribute('transform', `rotate(${angle} 50 50)`);
   };
   el.addEventListener('pointerdown', (e) => {
     e.preventDefault();

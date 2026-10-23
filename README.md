@@ -2,17 +2,17 @@
 
 **Play it at [linked-past.albertowd.dev](https://linked-past.albertowd.dev)**: bring your own ROM, nothing to install.
 
-![Two players in the same world: Mia's Link walks out of the house with the host's, while they chat in the sidebar](docs/screenshots/gameplay.webp)
+![Four players in the same world: Mia, Kai (in Zelda mode, with a pink name) and Noor hop down the ledge outside Link's house in the rain with the host, while they chat in the sidebar](docs/screenshots/gameplay.webp)
 
 Multiplayer for *The Legend of Zelda: A Link to the Past*, played in the browser as an installable PWA. Each player has their own story and save, but everyone explores the same world: see friends on screen, fight or keep the peace, trade items, and chat.
 
-**There is no game server.** One player hosts a room in their own browser, and friends on the same network join with an invite code.
+**There is no game server.** One player hosts a room in their own browser, and friends on the same network join by scanning the room's QR code.
 
 **Bring your own cartridge dump.** Linked Past ships no ROM, graphics, or any other Nintendo data. Players pick their own `.sfc`/`.smc` file, which stays on their device. When someone joins, the host checks that they really have a supported ROM by asking for SHA-256 hashes of random slices of it. The host checks those answers against a bundled table of hashes, so nobody can join without one.
 
 ## What it does
 
-- **Rooms in the browser, local network only.** One player clicks **Host**; their browser runs the room logic in a Web Worker, so it keeps going when the tab is in the background. It takes up to 20 players. Friends join with **invite codes**, and no internet connection is used at any point.
+- **Rooms in the browser, local network only.** One player clicks **Host**; their browser runs the room logic in a Web Worker, so it keeps going when the tab is in the background. It takes up to 20 players. Friends join with **QR codes** (or the same codes as text), and no internet connection is used at any point.
 - **Your own story.** Every player has their own save, kept on their device (one per cartridge). You can export and import it as an `.srm` file from the start screen.
 - **Shared world.** Players in the same zone (overworld light/dark, or the same dungeon room) see each other on screen. Every player also appears on the world map in the right-hand column.
 - **Two modes, chosen on the start screen:**
@@ -33,24 +33,27 @@ Multiplayer for *The Legend of Zelda: A Link to the Past*, played in the browser
 | Canada | `c1c6c7f7…aa100` | French |
 | France (PAL) | `229364a1…987cc` | French |
 | Germany (PAL) | `2e624949…c6559` | German |
+| Japan (1.0) | `e7e852f0…b9060` | Japanese |
 
-All five share the same WRAM layout, which was checked with a headless harness covering boot, movement, damage and inventory writes. Players on different regions can play together; PAL players run at 50 Hz.
+All six share the same WRAM layout, which was checked with a headless harness covering boot, movement, damage and inventory writes. Players on different regions can play together; PAL players run at 50 Hz. The Japanese cartridge's menu font is katakana only, so its UI labels are written in kana (as in the original game's menus) and Latin letters come from a built-in fallback font; text with kanji falls back to the system font.
 
 ## How connecting works
 
-1. The host clicks **Invite** and sends the invite code to a friend in any way: a chat app, a message, or even typed by hand.
-2. The friend clicks **Join**, pastes the code, and sends back the **reply code** the app shows.
-3. The host pastes the reply. The two browsers connect directly with WebRTC, end-to-end encrypted. Do this once per friend; several invites can be open at once.
+1. The host clicks **Invite** and shows the **room QR code**. It is the same for every friend for as long as the room is open (it holds a link that opens the game ready to join; the link can also be sent as text).
+2. The friend scans it with their phone camera (or opens the link), picks their cartridge, name and path, and presses **Join**. The app shows the friend's own **request code**, as a QR code and as text.
+3. The host presses **Scan** (or pastes the request) and the app shows an **answer code** for that friend. The friend scans or pastes it, and the two browsers connect directly with WebRTC, end-to-end encrypted. Several friends can be let in at once.
+
+Scanning uses the device camera on the spot (the browser's own QR reader where it has one, otherwise a bundled decoder); nothing is uploaded. Pasting codes still works everywhere.
 
 | Start screen | Host: invite | Friend: join |
 | --- | --- | --- |
-| ![Start screen with the Link and Zelda modes, a name, and Host/Join](docs/screenshots/start.webp) | ![Invite dialog with the invite code, the pasted reply and "Mia: Connected"](docs/screenshots/invite.webp) | ![Join dialog with the pasted invite and the reply code to send back](docs/screenshots/join.webp) |
+| ![Start screen with the Link and Zelda modes, a name, Host/Join, and the save file and cartridge controls](docs/screenshots/start.webp) | ![Invite card with the room QR code and link, the box for a friend's request, and "Mia: connected"](docs/screenshots/invite.webp) | ![Join card with the friend's request QR code and the host's pasted answer](docs/screenshots/join.webp) |
 
-WebRTC runs with **no STUN/TURN servers**, so only local addresses are used and nothing leaves your network. The codes are compressed WebRTC session descriptions, usable once and only by the two of you.
+WebRTC runs with **no STUN/TURN servers**, so only local addresses are used and nothing leaves your network. The request and answer codes are compressed WebRTC session descriptions, usable once and only by the two of you; the room code only names the room.
 
-The goal is play on a **local network**. **Radmin VPN / Hamachi** work as a virtual local network for friends who are far away. Browsers hide local IPs behind random `.local` names, which usually resolve on a real LAN but may not across a VPN. If friends can't connect, type your Radmin/Hamachi IP into **Your network address** before making the code. That adds the real IP to the code, and I haven't tested it on a real Radmin network yet.
+The goal is play on a **local network**. **Radmin VPN / Hamachi** work as a virtual local network for friends who are far away. Browsers hide local IPs behind random `.local` names, which usually resolve on a real LAN but may not across a VPN. If friends can't connect, type your Radmin/Hamachi IP into **Your network address** before making the codes (the host types theirs in Invite, a friend in Join). That adds the real IP to the code, and I haven't tested it on a real Radmin network yet.
 
-If the host closes the room, guests are told, and they rejoin with a new invite code.
+If the host closes the room, guests are told, and they rejoin by making a new request code.
 
 ## Layout
 
@@ -148,7 +151,7 @@ SONAR_PORT=9001 npm run sonar:up   # if port 9000 is taken, e.g. by another proj
 - **The host has the final say, but only in its own room.** Each player runs their own emulator, so a modified client could still cheat its own game. The host checks sword reach and trade amounts for everyone else.
 - **Keep the host's tab open.** The room lives there: it keeps running in the background thanks to the worker, but closing the tab ends it.
 - **Equipment can't be traded.** That covers swords, mail and quest items, so trades can't break story progression.
-- **No automatic reconnect.** Without any server there's nobody to redo the handshake, so after a disconnect a guest needs a new invite code.
+- **No automatic reconnect.** Without any server there's nobody to redo the handshake, so after a disconnect a guest makes a new request code and the host scans it again.
 - **Older versions:** the AWS-hosted version (accounts, cloud saves, Lambda + Fargate) is preserved on the `aws-server` branch.
 - **snes9x license:** snes9x is distributed under its own non-commercial license. See `emulator/snes9x-src/LICENSE` after building.
 
